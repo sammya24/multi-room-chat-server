@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <title>Chat Room</title>
+  
+        <meta charset="UTF-8">
+       
+       
+        <style>
+       
+       body {
+            background-color: #a8b3c9;
+        }
+        
+        h1 {
+            color: #475e8c;
+            font-size: 36px;
+        }
+        h2 {
+            color:  #475e8c;;
+            font-size: 30px;
+        }
+       
+        button {
+            font-size: 14px;
+            background-color: #66728a;
+            color: white;
+            
+        }
+
+        .box {
+            border: 2px solid #50648b;
+            padding: 10px;
+            margin: 10px;
+            border-radius: 10px;
+        }
+        </style>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        var socketio = io.connect();
+        var username;
+        var currentRoom = "Main Lobby"; //store the current room
+
+        function login() {
+            var input = document.getElementById("username_input");
+            username = input.value.trim();
+
+            if (username !== "") {
+                //"login" event to the server with the username
+                socketio.emit("login", { username: username });
+
+                //hide the login section and show the previously hidden sections
+                document.getElementById("login").style.display = "none";
+                document.getElementById("chat").style.display = "block";
+                document.getElementById("room").style.display = "block";
+                document.getElementById("users").style.display = "block";
+                document.getElementById("admins").style.display = "block";
+                document.getElementById("private_message").style.display = "block";
+                document.getElementById("name").style.display = "block";
+                document.getElementById("name_user").textContent = "Logged in as: " + username;
+            }
+        }
+
+        socketio.on("display_lists", function (data) { //erases lists and re-appends
+            //alert("hi frm display w " + data.roomName);
+            var isAdmin = false;
+            const roomName = data.roomName; //the room for which you want to get users
+            const activeuserslist = document.getElementById("activeusers"); //the element to display the user list
+
+            if (data.roomsAdmin.hasOwnProperty(roomName)) {
+                const adminsInRoom = data.roomsAdmin[roomName];
+
+                for (const admin of adminsInRoom) {
+                    if (admin === username) {
+                        isAdmin = true;
+                    }
+                    //const adminItem = document.createElement("li");
+                    //adminItem.textContent = admin;
+                    //adminlist.appendChild(adminItem);
+                }
+            }
+
+            //clear the user list
+            while (activeuserslist.firstChild) {
+                activeuserslist.removeChild(activeuserslist.firstChild);
+                
+            }
+
+            //iterate through connectedUsers to find users in the specified room
+            for (const u in data.connectedUsers) {
+
+                if (data.connectedUsers.hasOwnProperty(u) && data.connectedUsers[u] === roomName && u != "") {
+
+                    //create a list item for the user
+                    const listItem = document.createElement("li");
+
+                    listItem.textContent = u;
+                    
+                    if (isAdmin) {
+                        //if the user is an admin and the displayed user is an admin in the room
+                        
+                        const kickButton = document.createElement("button");
+                        kickButton.textContent = "Kick";
+
+                        kickButton.onclick = function () {
+                            //("ASJDAISUD");
+                            socketio.emit("kick_user", { targetUsername: u, currentRoom: roomName});
+
+
+                        };
+
+                        const banButton = document.createElement("button");
+                        banButton.textContent = "Ban";
+
+                        banButton.onclick = function () {
+                            //("ASJDAISUD");
+                            socketio.emit("kick_user", { targetUsername: u, currentRoom: roomName});
+                            socketio.emit("ban_user", { targetUsername: u, currentRoom: roomName});
+
+                        };
+
+                        listItem.appendChild(kickButton);
+                        listItem.appendChild(banButton);
+                    }
+                    //append the user to the user list
+                    activeuserslist.appendChild(listItem);
+                }
+            }
+
+            const adminlist = document.getElementById("activeadmins"); //element to display admin list
+
+            while (adminlist.firstChild) { //clear admin list (CORRECT)
+                adminlist.removeChild(adminlist.firstChild);
+
+            }
+
+            //iterate through roomsAdmin to display the admin list for the specified room
+            if (data.roomsAdmin.hasOwnProperty(roomName)) {
+                const adminsInRoom = data.roomsAdmin[roomName];
+
+                for (const admin of adminsInRoom) {
+                    const adminItem = document.createElement("li");
+                    adminItem.textContent = admin;
+                    adminlist.appendChild(adminItem);
+                }
+            }
+        });
+
+        socketio.on("message_to_client", function (data) {
+
+            document.getElementById("chatlog").appendChild(document.createElement("hr"));
+            document.getElementById("chatlog").appendChild(document.createTextNode(data.username + ": " + data.message));
+        });
+
+        function sendMessage() {
+            var msg = document.getElementById("message_input").value;
+            //emit the message with the associated username and the current room
+            socketio.emit("message_to_server", { message: msg, username: username, room: currentRoom });
+        }
+
+        socketio.on("username_taken", function () {
+            //username already taken
+            alert("Username already taken. Please choose a different username.");
+            //clear the username input field
+            document.getElementById("username_input").value = "";
+            document.getElementById("login").style.display = "block";
+            document.getElementById("chat").style.display = "none";
+            document.getElementById("room").style.display = "none";
+            document.getElementById("users").style.display = "none";
+            document.getElementById("admins").style.display = "none";
+            document.getElementById("private_message").style.display = "none";
+            document.getElementById("name").style.display = "none";
+            
+        });
+
+
+        socketio.on("chatroom_taken", function () {
+            //chatroom name is already taken
+            console.log("HI");
+            alert("Chatroom name already taken. Please choose a different name.");
+
+
+        });
+
+        socketio.on("no_room_exist", function () {
+            alert("No such room exists");
+        });
+
+        socketio.on("incorrect_password", function () {
+            alert("Incorrect Password");
+        });
+
+        socketio.on("banned", function () {
+            alert("Sorry, you were banned!");
+        });
+
+
+        socketio.on("room_change", function (room) {
+            //console.log(room); 
+
+
+            if (room.roomName) {
+                document.getElementById("room_indicator").textContent = "Current Room: " + room.roomName;
+            } else {
+                //'room' doesn't have the expected property
+                document.getElementById("room_indicator").textContent = "Invalid room data";
+            }
+        });
+
+
+        function createRoom() {
+            var roomName = document.getElementById("room_input").value.trim();
+            var roomPass = document.getElementById("room_pass").value.trim();
+
+            if (roomName !== "") {
+                //emit a "create_room" event to the server with the room name
+                socketio.emit("create_room", { roomName: roomName, roomPass: roomPass });
+            }
+        }
+
+        function joinRoom() {
+            var roomName = document.getElementById("room_input").value.trim();
+            var roomPass = document.getElementById("room_pass").value.trim();
+
+            if (roomName !== "") {
+                //emit a "join_room" event to the server with the room name
+                socketio.emit("join_room", { roomName: roomName, roomPass: roomPass, username: username });
+                //currentRoom = roomName;
+            }
+        }
+
+
+        function sendPrivateMessage() {
+            var targetUsername = document.getElementById("private_username_input").value.trim();
+            var message = document.getElementById("private_message_input").value.trim();
+
+            if (targetUsername !== "" && message !== "") {
+                // Emit a "private_message" event to the server with the target username and message
+                socketio.emit("private_message", { targetUsername: targetUsername, message: message });
+
+                // Display the private message in the chat log
+                document.getElementById("chatlog").appendChild(document.createElement("hr"));
+                document.getElementById("chatlog").appendChild(document.createTextNode(`(Private) ${username} to ${targetUsername}: ${message}`));
+            }
+        }
+
+        socketio.on("kick_helper", function (data){
+            //alert("POOP");
+            socketio.emit("join_room", {roomName: "Main Lobby", roomPass:"", username: data.username})
+
+        });
+
+        socketio.on("private_msg", function (data) {
+            //display incoming priv msgs
+            console.log("REcieved");
+            document.getElementById("chatlog").appendChild(document.createElement("hr"));
+            document.getElementById("chatlog").appendChild(document.createTextNode(`(Private) ${data.senderUsername}: ${data.message}`));
+        });
+
+        socketio.on("private_message_error", function (data) {
+            //errors
+            alert(data.message);
+        });
+
+
+    </script>
+</head>
+
+<body>
+
+    <div id="login" class="box">
+        <h1>Login</h1>
+        <input type="text" id="username_input" placeholder="Enter your username">
+        <button onclick="login()">Log In</button>
+    </div>
+    
+    <div id="name" class="box" style="display: none;">
+        <h1 id="name_user">User</h1>
+    </div>
+    
+    <div id="room" class="box" style="display: none;">
+        <h1>Create/Join a Room</h1>
+        <input type="text" id="room_input" placeholder="Type a room name">
+        <input type="password" id="room_pass" placeholder="Type the room password">
+        <button onclick="createRoom()">Create</button>
+        <button onclick="joinRoom()">Join</button>
+    </div>
+
+    <div id="chat" class="box" style="display: none;">
+        <h1 id="room_indicator">Current Room: Main Lobby</h1>
+        <input type="text" id="message_input" placeholder="Type your message">
+        <button onclick="sendMessage()">Send</button>
+        <h2>ChatLog</h2>
+        <div id="chatlog"></div>
+    </div>
+
+    <div id="private_message" class="box" style="display: none;">
+        <h1>Send a Private Message</h1>
+        <input type="text" id="private_username_input" placeholder="Enter the recipient's username">
+        <input type="text" id="private_message_input" placeholder="Type your private message">
+        <button onclick="sendPrivateMessage()">Send Private Message</button>
+    </div>
+
+    <div id="users" class="box" style="display: none;">
+        <h2>Active Users</h2>
+        <div id="activeusers"></div>
+    </div>
+
+    <div id="admins" class="box" style="display: none;">
+        <h2>Admins</h2>
+        <div id="activeadmins"></div>
+    </div>
+
+</body>
+
+</html>
